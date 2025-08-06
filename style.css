@@ -70,38 +70,4 @@ body { font-family: "Inter", sans-serif; background-color: #f3f4f6; margin: 0; }
 .fab-child { transform: scale(0); transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s; opacity: 0; }
 .fab-container.open .fab-child { transform: scale(1); opacity: 1; }
 .fab-label { background-color: #374151; color: white; padding: 0.25rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 600; opacity: 0; transition: opacity 0.2s ease; pointer-events: none; transform: translateX(10px); }
-.fab-container.open .fab-label { opacity: 1; transform: translateX(0); }.tab-list::-webkit-scrollbar { display: none; }
-.tab-button { padding: 0.75rem 1rem; font-weight: 600; color: #6b7280; border-bottom: 2px solid transparent; transition: color 0.3s ease, border-color 0.3s ease; white-space: nowrap; flex-shrink: 0; background: none; border-top: none; border-left: none; border-right: none; cursor: pointer; }
-@media (min-width: 640px) { .tab-list { justify-content: center; } .tab-button { padding: 1rem 1.5rem; } }
-.tab-button.active { color: #4f46e5; border-color: #4f46e5; }
-.tab-panel { display: none; padding-top: 1.5rem; } .tab-panel.active { display: block; }
-.will-animate { opacity: 0; transform: translateY(20px); transition: opacity 0.5s ease-out, transform 0.5s ease-out; }
-.is-visible { opacity: 1; transform: translateY(0); }
-@keyframes flash-green { 0% { background-color: #d1fae5; } 100% { background-color: #ffffff; } }
-.flash-enter { animation: flash-green 1.5s ease-out forwards; }
-.transaction-item { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; background-color: #fff; border-radius: 0.5rem; box-shadow: 0 1px 2px rgba(0,0,0,0.05); cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; }
-.transaction-item:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.08); }
-.transaction-item .description { font-weight: 600; color: #1f2937; }
-.transaction-item .details { font-size: 0.75rem; color: #6b7280; }
-.transaction-item .amount { font-weight: 700; font-family: monospace; font-size: 1rem; }
-.transaction-item.income .amount { color: #10B981; }
-.transaction-item.expense .amount { color: #EF4444; }
-.insights-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-@media (min-width: 768px) { .insights-grid { grid-template-columns: repeat(2, 1fr); } }
-.insight-title { font-weight: 700; font-size: 1.125rem; color: #1f2937; }
-.insight-subtitle { font-size: 0.875rem; color: #6b7280; margin-top: 0.25rem; }
-.full-width-card { grid-column: 1 / -1; }
-.hotspot-item { display: flex; align-items: center; justify-content: space-between; gap: 1rem;}
-.hotspot-item .progress-bar-container { max-width: 120px; }
-#voiceFab { position: fixed; right: 1rem; bottom: 6rem; z-index: 800;}
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7); } 70% { box-shadow: 0 0 0 20px rgba(37, 99, 235, 0); } 100% { box-shadow: 0 0 0 0 rgba(37, 99, 235, 0); } }
-#voiceFab.listening { animation: pulse 1.5s infinite; }
-.fab-container { position: fixed; right: 1rem; bottom: 1.5rem; z-index: 800; display: flex; flex-direction: column-reverse; align-items: center; gap: 1rem;}
-.fab-base { width: 3.5rem; height: 3.5rem; border-radius: 9999px; color: #ffffff; box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.3s ease; border: none; }
-#mainFabIcon { transition: transform 0.3s ease; }
-.fab-container.open #mainFabIcon { transform: rotate(45deg); }
-.fab-child-container { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; margin-bottom: -0.5rem; }
-.fab-child { transform: scale(0); transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s; opacity: 0; }
-.fab-container.open .fab-child { transform: scale(1); opacity: 1; }
-.fab-label { background-color: #374151; color: white; padding: 0.25rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 600; opacity: 0; transition: opacity 0.2s ease; pointer-events: none; transform: translateX(10px); }
 .fab-container.open .fab-label { opacity: 1; transform: translateX(0); }
