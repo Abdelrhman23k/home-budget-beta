@@ -99,6 +99,7 @@ export function renderUI() {
     populateTransactionFilters();
     renderTransactionList();
     renderHistoryList();
+    renderInsights();
 }
 
 function renderSummary() {
@@ -206,11 +207,8 @@ async function renderHistoryList() {
     }
 }
 
-function renderInsights() {
-    renderNeedsWantsChart();
-    renderBudgetHotspots();
-    renderHistoricalCharts();
-}
+// --- All other functions ---
+// (The rest of the file is included below)
 
 // --- HTML COMPONENT GENERATORS ---
 
@@ -290,5 +288,149 @@ function createTransactionItemHTML(item) {
     `;
 }
 
+// --- INSIGHTS RENDERING ---
 
-// --- All other handler and modal functions are here ---
+function renderInsights() {
+    renderNeedsWantsChart();
+    renderBudgetHotspots();
+    renderHistoricalCharts();
+}
+
+function renderNeedsWantsChart() {
+    const container = document.getElementById('needsWantsChartContainer');
+    if (!container) return;
+
+    const categories = state.store.currentBudget.categories || [];
+    const totalSpent = categories.reduce((sum, cat) => sum + (cat.spent || 0), 0);
+
+    if (totalSpent === 0) {
+        container.innerHTML = `<p class="text-center text-gray-500 mt-8">No spending data for this month yet.</p>`;
+        return;
+    }
+
+    const spendingByType = { 'Needs': 0, 'Wants': 0, 'Savings': 0 };
+    categories.forEach(cat => {
+        if (spendingByType[cat.type] !== undefined) {
+            spendingByType[cat.type] += (cat.spent || 0);
+        }
+    });
+    
+    container.innerHTML = `<canvas id="needsWantsChartCanvas"></canvas>`;
+    const canvas = document.getElementById('needsWantsChartCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const chart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(spendingByType),
+            datasets: [{
+                label: 'Spending',
+                data: Object.values(spendingByType),
+                backgroundColor: ['#3B82F6', '#F59E0B', '#10B981'],
+                borderColor: '#ffffff',
+                borderWidth: 4,
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+    });
+    state.setNeedsWantsChart(chart);
+}
+
+function renderBudgetHotspots() {
+    const container = document.getElementById('budgetHotspotsList');
+    if (!container) return;
+
+    const categories = (state.store.currentBudget.categories || [])
+        .filter(c => (c.allocated || 0) > 0)
+        .map(c => ({...c, percentage: ((c.spent || 0) / c.allocated) * 100 }))
+        .sort((a,b) => b.percentage - a.percentage)
+        .slice(0, 5);
+
+    if (categories.length === 0) {
+        container.innerHTML = `<p class="text-center text-gray-500">No categories with allocated budgets.</p>`;
+        return;
+    }
+
+    container.innerHTML = categories.map(cat => {
+        const color = cat.percentage > 100 ? 'bg-red-500' : (cat.percentage > 75 ? 'bg-yellow-500' : 'bg-blue-500');
+        return `
+            <div class="hotspot-item">
+                <div class="flex items-center gap-2">
+                    <span class="font-semibold text-sm">${cat.name}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs font-mono">${cat.percentage.toFixed(0)}%</span>
+                    <div class="progress-bar-container w-24">
+                        <div class="progress-bar-fill ${color}" style="width: ${Math.min(100, cat.percentage)}%"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function renderHistoricalCharts() {
+    const histContainer = document.getElementById('historicalSavingsChartContainer');
+    const deepDiveContainer = document.getElementById('categoryDeepDiveContainer');
+    const deepDiveSelect = document.getElementById('categoryDeepDiveSelect');
+    if (!histContainer || !deepDiveContainer || !deepDiveSelect) return;
+
+    try {
+        const snapshot = await firestore.getArchivedBudgets(state.store.userId, state.store.activeBudgetId);
+        if (snapshot.empty || snapshot.docs.length < 2) {
+            histContainer.innerHTML = `<p class="text-center text-gray-500 mt-8">Archive at least two months to see trends.</p>`;
+            deepDiveContainer.innerHTML = `<p class="text-center text-gray-500 mt-8">Not enough data for a deep dive.</p>`;
+            deepDiveSelect.innerHTML = '';
+            return;
+        }
+
+        const archives = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.id.localeCompare(b.id));
+        const labels = archives.map(archive => archive.id);
+        const totalSpentData = archives.map(archive => (archive.categories || []).reduce((sum, cat) => sum + (cat.spent || 0), 0));
+        const incomeData = archives.map(a => (a.incomeTransactions || []).reduce((sum, t) => sum + t.amount, 0));
+        const netSavingsData = incomeData.map((income, i) => income - totalSpentData[i]);
+
+        histContainer.innerHTML = `<canvas id="historicalSavingsChartCanvas"></canvas>`;
+        const ctx = document.getElementById('historicalSavingsChartCanvas').getContext('2d');
+        const histChart = new Chart(ctx, { type: 'line', data: { labels, datasets: [ { label: 'Total Spent', data: totalSpentData, borderColor: '#EF4444' }, { label: 'Total Income', data: incomeData, borderColor: '#22C55E', borderDash: [5, 5] }, { label: 'Net Savings', data: netSavingsData, borderColor: '#3B82F6', backgroundColor: 'rgba(59, 130, 246, 0.1)', fill: true, tension: 0.2 } ] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
+        state.setHistoricalSavingsChart(histChart);
+
+        const allCategoryNames = [...new Set(archives.flatMap(a => (a.categories || []).map(c => c.name)))];
+        deepDiveSelect.innerHTML = allCategoryNames.map(name => `<option value="${name}">${name}</option>`).join('');
+
+        const renderDeepDive = () => {
+            const selectedCategory = deepDiveSelect.value;
+            if (!selectedCategory) { deepDiveContainer.innerHTML = ''; return; }
+            const categoryData = archives.map(archive => { const category = (archive.categories || []).find(c => c.name === selectedCategory); return category ? (category.spent || 0) : 0; });
+            deepDiveContainer.innerHTML = `<canvas id="categoryDeepDiveCanvas"></canvas>`;
+            const deepDiveCtx = document.getElementById('categoryDeepDiveCanvas').getContext('2d');
+            const ddChart = new Chart(deepDiveCtx, { type: 'bar', data: { labels, datasets: [{ label: `Spending for ${selectedCategory}`, data: categoryData, backgroundColor: '#8B5CF6' }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } } });
+            state.setCategoryDeepDiveChart(ddChart);
+        };
+        deepDiveSelect.onchange = renderDeepDive;
+        renderDeepDive();
+    } catch(error) {
+        utils.logError('ui.renderHistoricalCharts', error);
+        histContainer.innerHTML = `<p class="text-center text-red-500 mt-8">Could not load historical data.</p>`;
+    }
+}
+
+// --- EVENT HANDLERS & MODAL LOGIC ---
+
+async function handleBudgetSwitch() { try { const newBudgetId = dom.budgetSelector.value; if (newBudgetId === state.store.activeBudgetId) return; setUIState('loading'); await firestore.saveActiveBudgetId(state.store.userId, newBudgetId); state.setActiveBudgetId(newBudgetId); await firestore.setupBudgetListener(state.store.userId, newBudgetId); } catch (error) { utils.logError('ui.handleBudgetSwitch', error); setUIState('error', { message: 'Could not switch budgets.' }); } }
+async function handleAddNewBudget() { try { const name = prompt("Enter a name for the new budget:", "New Budget"); if (name) { setUIState('loading'); const newBudget = await firestore.createNewBudget(state.store.userId, name); if (newBudget) { state.updateAllBudgets(newBudget.id, newBudget.name); populateBudgetSelector(); dom.budgetSelector.value = newBudget.id; await handleBudgetSwitch(); } } } catch (error) { utils.logError('ui.handleAddNewBudget', error); setUIState('loaded'); } }
+async function deleteCurrentBudget() { if (Object.keys(state.store.allBudgets).length <= 1) { showNotification("You cannot delete your only budget.", "danger"); return; } const budgetNameToDelete = state.store.allBudgets[state.store.activeBudgetId]; const confirmed = await showConfirmModal(`Delete "${budgetNameToDelete}"?`, "This is permanent and will delete all associated data for this budget."); if (confirmed) { setUIState('loading'); try { const idToDelete = state.store.activeBudgetId; await firestore.deleteBudget(state.store.userId, idToDelete); state.deleteFromAllBudgets(idToDelete); const newActiveId = Object.keys(state.store.allBudgets)[0]; dom.budgetSelector.value = newActiveId; await handleBudgetSwitch(); populateBudgetSelector(); showNotification(`Budget "${budgetNameToDelete}" deleted.`, 'success'); } catch (error) { utils.logError('ui.deleteCurrentBudget', error); setUIState('loaded'); } } }
+async function handleArchiveMonth() { const confirmed = await showConfirmModal('Archive Month?', 'This will save a snapshot and reset all transactions for the new month.'); if (confirmed) { try { const now = new Date(); const archiveId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; const archiveDocRef = doc(firestore.db, `artifacts/${appId}/users/${state.store.userId}/budgets/${state.store.activeBudgetId}/archive/${archiveId}`); await setDoc(archiveDocRef, state.store.currentBudget); state.store.currentBudget.transactions = []; state.store.currentBudget.incomeTransactions = []; state.store.currentBudget.categories.forEach(c => c.spent = 0); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); showNotification(`Budget for ${archiveId} has been archived.`, 'success'); } catch (error) { utils.logError('ui.handleArchiveMonth', error); showNotification("Archiving failed. Please try again.", "danger"); } } }
+function handleTransactionListClick(e) { const itemElement = e.target.closest('.transaction-item'); if (!itemElement) return; const id = itemElement.dataset.id; const type = itemElement.dataset.type; const action = e.target.closest('button')?.dataset.action; if (!action) return; if (action === 'edit-income') { const income = (state.store.currentBudget.incomeTransactions || []).find(i => i.id === id); if(income) openIncomeModal(income); } else if (action === 'delete-income') { handleDeleteIncome(id); } else if (action === 'edit-expense') { const transaction = (state.store.currentBudget.transactions || []).find(t => t.id === id); if(transaction) openTransactionModal(transaction); } else if (action === 'delete-expense') { handleDeleteTransaction(id); } }
+async function handleHistoryClick(e) { const viewBtn = e.target.closest('.view-archive-btn'); if (viewBtn) { const archiveId = viewBtn.dataset.archiveId; const archiveDocRef = doc(firestore.db, `artifacts/${appId}/users/${state.store.userId}/budgets/${state.store.activeBudgetId}/archive/${archiveId}`); try { const docSnap = await getDoc(archiveDocRef); if (docSnap.exists()) { renderArchivedMonthDetails(archiveId, docSnap.data()); showModal(CONSTANTS.MODAL_IDS.archivedDetails); } else { showNotification("Could not find archive.", "danger"); } } catch (error) { utils.logError('ui.handleHistoryClick', error); showNotification("Failed to load archive details.", "danger"); } } }
+function handleCategoryCardClick(e) { const card = e.target.closest('.category-card'); if (!card) return; const action = e.target.closest('button')?.dataset.action; if (action === 'edit-category') { e.stopPropagation(); state.setEditingCategoryId(card.dataset.categoryId); const category = state.store.currentBudget.categories.find(c => c.id === state.store.editingCategoryId); if (category) openCategoryModal(category); } else if (action === 'delete-category') { e.stopPropagation(); handleDeleteCategory(card.dataset.categoryId); } else { dom.tabs.forEach(b => b.classList.toggle('active', b.dataset.tab === 'transactions')); dom.tabPanels.forEach(p => p.classList.toggle('active', p.id === 'tab-transactions')); document.getElementById('filterCategory').value = card.dataset.categoryId; renderTransactionList(); } }
+
+async function handleTransactionFormSubmit(e) { e.preventDefault(); const form = e.target; const submitButton = form.querySelector('button[type="submit"]'); const originalButtonText = submitButton.innerHTML; submitButton.disabled = true; submitButton.innerHTML = `<div class="spinner-small"></div> Saving...`; try { const newTransactionId = state.store.editingTransactionId || `trans-${Date.now()}`; const newTransaction = { id: newTransactionId, amount: parseFloat(document.getElementById('modalTransactionAmount').value), categoryId: document.getElementById('modalTransactionCategory').value, subcategory: document.getElementById('modalTransactionSubcategory').value, paymentMethod: document.getElementById('modalTransactionPaymentMethod').value, description: document.getElementById('modalTransactionDescription').value, date: document.getElementById('modalTransactionDate').value, }; if (!state.store.currentBudget.transactions) state.store.currentBudget.transactions = []; if (state.store.editingTransactionId) { const index = state.store.currentBudget.transactions.findIndex(t => t.id === state.store.editingTransactionId); if (index > -1) state.store.currentBudget.transactions[index] = newTransaction; } else { state.store.currentBudget.transactions.push(newTransaction); state.setLastAddedItemId(newTransactionId); } state.recalculateSpentAmounts(); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); hideModal(CONSTANTS.MODAL_IDS.transaction); showNotification('Expense saved.', 'success'); } catch (error) { utils.logError('ui.handleTransactionFormSubmit', error); showNotification("Failed to save expense.", "danger"); } finally { submitButton.disabled = false; submitButton.innerHTML = originalButtonText; state.setEditingTransactionId(null); } }
+async function handleIncomeFormSubmit(e) { e.preventDefault(); const form = e.target; const submitButton = form.querySelector('button[type="submit"]'); const originalButtonText = submitButton.innerHTML; submitButton.disabled = true; submitButton.innerHTML = `<div class="spinner-small"></div> Saving...`; try { const newIncomeId = state.store.editingIncomeId || `income-${Date.now()}`; const newIncome = { id: newIncomeId, amount: parseFloat(document.getElementById('modalIncomeAmount').value), description: document.getElementById('modalIncomeDescription').value, date: document.getElementById('modalIncomeDate').value }; if (!state.store.currentBudget.incomeTransactions) state.store.currentBudget.incomeTransactions = []; if (state.store.editingIncomeId) { const index = state.store.currentBudget.incomeTransactions.findIndex(i => i.id === state.store.editingIncomeId); if (index > -1) state.store.currentBudget.incomeTransactions[index] = newIncome; } else { state.store.currentBudget.incomeTransactions.push(newIncome); state.setLastAddedItemId(newIncomeId); } await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); hideModal(CONSTANTS.MODAL_IDS.income); showNotification('Income saved.', 'success'); } catch (error) { utils.logError('ui.handleIncomeFormSubmit', error); showNotification("Failed to save income.", "danger"); } finally { submitButton.disabled = false; submitButton.innerHTML = originalButtonText; state.setEditingIncomeId(null); } }
+async function handleCategoryFormSubmit(e) { e.preventDefault(); const form = e.target; const submitButton = form.querySelector('button[type="submit"]'); const originalButtonText = submitButton.innerHTML; submitButton.disabled = true; submitButton.innerHTML = `<div class="spinner-small"></div> Saving...`; try { const name = document.getElementById('modalCategoryName').value; const allocated = parseFloat(document.getElementById('modalAllocatedAmount').value); const type = document.getElementById('modalCategoryType').value; if (state.store.editingCategoryId) { const category = state.store.currentBudget.categories.find(c => c.id === state.store.editingCategoryId); if (category) { category.name = name; category.allocated = allocated; category.type = type; } } else { if (!state.store.currentBudget.categories) state.store.currentBudget.categories = []; state.store.currentBudget.categories.push({ id: name.toLowerCase().replace(/\s+/g, '-') + '-' + Date.now(), name, allocated, spent: 0, type, color: `#${(Math.random()*0xFFFFFF<<0).toString(16).padStart(6,'0')}`, icon: defaultCategoryIcon }); } await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); hideModal(CONSTANTS.MODAL_IDS.category); showNotification(`Category saved successfully.`, 'success'); } catch (error) { utils.logError('ui.handleCategoryFormSubmit', error); showNotification("Failed to save category.", "danger"); } finally { submitButton.disabled = false; submitButton.innerHTML = originalButtonText; state.setEditingCategoryId(null); } }
+async function handleDeleteTransaction(transactionId) { const confirmed = await showConfirmModal('Delete Transaction?', 'Are you sure you want to delete this transaction?'); if (confirmed) { try { state.store.currentBudget.transactions = state.store.currentBudget.transactions.filter(t => t.id !== transactionId); state.recalculateSpentAmounts(); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); showNotification('Transaction deleted.', 'success'); } catch (error) { utils.logError('ui.handleDeleteTransaction', error); showNotification("Failed to delete transaction.", "danger"); } } }
+async function handleDeleteIncome(incomeId) { const confirmed = await showConfirmModal('Delete Income?', 'Are you sure you want to delete this income entry?'); if (confirmed) { try { state.store.currentBudget.incomeTransactions = state.store.currentBudget.incomeTransactions.filter(i => i.id !== incomeId); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); showNotification('Income deleted.', 'success'); } catch (error) { utils.logError('ui.handleDeleteIncome', error); showNotification("Failed to delete income.", "danger"); } } }
+async function handleDeleteCategory(categoryId) { const category = state.store.currentBudget.categories.find(c => c.id === categoryId); if (!category) return; const confirmed = await showConfirmModal('Delete Category?', `Are you sure you want to delete the "${category.name}" category? All associated transactions will also be deleted.`); if (confirmed) { try { state.store.currentBudget.categories = state.store.currentBudget.categories.filter(c => c.id !== categoryId); state.store.currentBudget.transactions = (state.store.currentBudget.transactions || []).filter(t => t.categoryId !== categoryId); state.recalculateSpentAmounts(); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); showNotification(`Category "${category.name}" deleted.`, 'success'); } catch (error) { utils.logError('ui.handleDeleteCategory', error); showNotification("Failed to delete category.", "danger"); } } }
+
+// --- Other UI functions ---
+// (This space is for functions like openModal, populateFilters, etc.)
