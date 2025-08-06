@@ -2,7 +2,7 @@ import { doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, addDoc
 import { db } from './firebase.js';
 import { defaultBudget, appId } from './config.js';
 import { store, setAllBudgets, updateAllBudgets, setCurrentBudget, setUnsubscribe, setActiveBudgetId as setStateActiveBudgetId } from './state.js';
-import { showNotification, populateBudgetSelector, renderUI } from './ui.js';
+import { showNotification, populateBudgetSelector } from './ui.js';
 import { logError } from './utils.js';
 
 export async function saveBudget(userId, budgetId, budgetData) {
@@ -13,7 +13,7 @@ export async function saveBudget(userId, budgetId, budgetData) {
     } catch (error) {
         logError('firestore.saveBudget', error);
         showNotification("Error saving your changes. Please check your connection.", "danger");
-        throw error; // Re-throw the error for the caller to handle if needed
+        throw error;
     }
 }
 
@@ -27,7 +27,7 @@ export async function createNewBudget(userId, name) {
     } catch (error) {
         logError('firestore.createNewBudget', error);
         showNotification("Could not create new budget.", "danger");
-        return null;
+        throw error;
     }
 }
 
@@ -48,7 +48,6 @@ export async function saveActiveBudgetId(userId, budgetId) {
         await setDoc(prefsDocRef, { activeBudgetId: budgetId });
     } catch (error) {
         logError('firestore.saveActiveBudgetId', error);
-        // This is a non-critical error, so we don't show a notification
     }
 }
 
@@ -59,13 +58,8 @@ export async function getArchivedBudgets(userId, budgetId) {
     } catch (error) {
         logError('firestore.getArchivedBudgets', error);
         showNotification("Could not load budget history.", "danger");
-        return { empty: true, docs: [] }; // Return an empty snapshot-like object
+        return { empty: true, docs: [] };
     }
-}
-
-export async function initializeAppState() {
-    // This function now lives in main.js to orchestrate modules
-    // but the logic inside it uses these firestore functions.
 }
 
 export async function migrateOldBudgetStructure(userId) {
@@ -83,7 +77,6 @@ export async function migrateOldBudgetStructure(userId) {
             }
             delete oldBudgetData.income;
             if (!oldBudgetData.transactions) oldBudgetData.transactions = [];
-
             const newBudgetRef = await addDoc(budgetsColRef, oldBudgetData);
             await saveActiveBudgetId(userId, newBudgetRef.id);
             await deleteDoc(oldBudgetRef);
@@ -92,6 +85,7 @@ export async function migrateOldBudgetStructure(userId) {
     } catch (error) {
         logError('firestore.migrateOldBudgetStructure', error);
         showNotification("Could not update account structure.", "danger");
+        throw error;
     }
 }
 
