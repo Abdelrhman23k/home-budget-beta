@@ -52,6 +52,87 @@
                             <p class="font-bold text-xl sm:text-2xl text-red-600"><span id="totalSpentValue">0.00</span> EGP</p>
                         </div>
                     </div>
+                    <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden"><div id="overallProgressBar" class="bg-gradient-to-r from-blue-400 to-purple-500 h-4 rounded-full transition-all duration-500" style="width: 0%;"></div></div>
+                    <p class="text-right font-semibold mt-1">Net Flow: <span id="overallRemainingValue" class="text-green-600">0.00</span> EGP</p>
+                </div>
+                <div class="content-card">
+                    <h2 class="text-lg sm:text-xl font-semibold text-gray-800 mb-4">Manage</h2>
+                    <div class="flex gap-2 flex-wrap">
+                        <button id="manageSubcategoriesButton" class="btn bg-cyan-500 hover:bg-cyan-600">Subcategories</button>
+                        <button id="managePaymentsButton" class="btn bg-teal-500 hover:bg-teal-600">Payments</button>
+                        <button id="manageTypesButton" class="btn bg-gray-500 hover:bg-gray-600">Types</button>
+                        <button id="addCategoryModalButton" class="btn btn-purple">Add Category</button>
+                    </div>
+                </div>
+                <div id="categoryDetailsContainer" class="space-y-8"></div>
+                <div class="mt-8 text-center"><button id="archiveMonthButton" class="btn bg-indigo-600 hover:bg-indigo-700 w-full sm:w-auto">Archive Current Month</button></div>
+            </div>
+
+            <div id="tab-transactions" class="tab-panel">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Cash Flow</h2>
+                <div class="content-card grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <div><label for="filterCategory" class="block text-sm font-medium text-gray-700">Category</label><select id="filterCategory" class="form-input mt-1"></select></div>
+                    <div><label for="filterPaymentMethod" class="block text-sm font-medium text-gray-700">Payment Method</label><select id="filterPaymentMethod" class="form-input mt-1"></select></div>
+                    <div><label for="filterStartDate" class="block text-sm font-medium text-gray-700">Start Date</label><input type="date" id="filterStartDate" class="form-input mt-1"></div>
+                    <div><label for="filterEndDate" class="block text-sm font-medium text-gray-700">End Date</label><input type="date" id="filterEndDate" class="form-input mt-1"></div>
+                    <div class="lg:col-span-4 flex justify-end"><button id="clearFiltersButton" class="btn bg-gray-600 hover:bg-gray-700 w-full sm:w-auto">Clear Filters</button></div>
+                </div>
+                <div id="transactionList" class="space-y-3"></div>
+            </div>
+
+            <div id="tab-history" class="tab-panel">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Archived Budgets</h2>
+                <div id="monthlyHistoryList" class="space-y-3"></div>
+            </div>
+
+            <div id="tab-insights" class="tab-panel">
+                <h2 class="text-2xl font-bold text-gray-800 mb-4">Financial Insights</h2>
+                <div class="insights-grid">
+                    <div class="content-card"><h3 class="insight-title">This Month's Spending DNA</h3><div class="relative h-64 sm:h-72" id="needsWantsChartContainer"><canvas id="needsWantsChartCanvas"></canvas></div></div>
+                    <div class="content-card"><h3 class="insight-title">Budget Hotspots</h3><p class="insight-subtitle">Categories nearing their limit.</p><div id="budgetHotspotsList" class="mt-4 space-y-3"></div></div>
+                    <div class="content-card full-width-card"><h3 class="insight-title">Spending & Savings Over Time</h3><p class="insight-subtitle">Based on your archived months.</p><div class="relative h-80 mt-4" id="historicalSavingsChartContainer"><canvas id="historicalSavingsChartCanvas"></canvas></div></div>
+                    <div class="content-card full-width-card"><h3 class="insight-title">Category Deep Dive</h3><p class="insight-subtitle">Track a category's spending over time.</p><div class="mt-4"><label for="categoryDeepDiveSelect" class="block text-sm font-medium text-gray-700 mb-1">Select a category:</label><select id="categoryDeepDiveSelect" class="form-input"></select></div><div class="relative h-80 mt-4" id="categoryDeepDiveContainer"><canvas id="categoryDeepDiveCanvas"></canvas></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="fab-container">
+        <div class="fab-child-container"><div class="fab-label">Income</div><button id="addIncomeFab" class="fab-base fab-child bg-green-500" title="Add Income"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div>
+        <div class="fab-child-container"><div class="fab-label">Expense</div><button id="addExpenseFab" class="fab-base fab-child bg-red-500" title="Add Expense"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button></div>
+        <button id="mainFab" class="fab-base bg-indigo-600" title="Add Transaction"><svg id="mainFabIcon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+    </div>
+    <button id="voiceFab" class="fab-base" title="Start Voice Input"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg></button>
+    
+    <div id="inlineNotification" class="hidden"></div>
+    <div id="categoryModalOverlay" class="custom-modal-overlay hidden"></div>
+    <div id="transactionModalOverlay" class="custom-modal-overlay hidden"></div>
+    <div id="incomeModalOverlay" class="custom-modal-overlay hidden"></div>
+    <div id="archivedMonthDetailsModalOverlay" class="custom-modal-overlay hidden"></div>
+    <div id="confirmModalOverlay" class="custom-modal-overlay hidden"></div>
+    <div id="manageItemsModalOverlay" class="custom-modal-overlay hidden"></div>
+    <div id="manageSubcategoriesModalOverlay" class="custom-modal-overlay hidden"></div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>                <button class="tab-button active" data-tab="dashboard">Dashboard</button>
+                <button class="tab-button" data-tab="transactions">Transactions</button>
+                <button class="tab-button" data-tab="history">History</button>
+                <button class="tab-button" data-tab="insights">Insights</button>
+            </div>
+
+            <div id="tab-dashboard" class="tab-panel active">
+                <div class="content-card">
+                    <div class="flex justify-between items-start text-lg mb-2">
+                        <div>
+                            <p class="text-sm text-gray-500">Total Income</p>
+                            <p class="font-bold text-xl sm:text-2xl text-indigo-700"><span id="totalBudgetValue">0.00</span> EGP</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm text-gray-500">Total Spent</p>
+                            <p class="font-bold text-xl sm:text-2xl text-red-600"><span id="totalSpentValue">0.00</span> EGP</p>
+                        </div>
+                    </div>
                     <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
                         <div id="overallProgressBar" class="bg-gradient-to-r from-blue-400 to-purple-500 h-4 rounded-full transition-all duration-500" style="width: 0%;"></div>
                     </div>
