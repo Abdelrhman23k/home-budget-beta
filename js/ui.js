@@ -73,11 +73,11 @@ function createTransactionItemHTML(item) {
     
     return `
         <div class="transaction-item ${typeClass} ${isNew ? flashClass : ''}" data-id="${item.id}" data-type="${item.type}">
-            <div>
+            <div class="flex-grow pr-4">
                 <p class="description">${description}</p>
                 <p class="details">${details}</p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-shrink-0">
                 <span class="amount">${amount}</span>
                 ${buttons}
             </div>
@@ -106,10 +106,43 @@ export function initializeDOMCache() {
     };
 }
 
+export function initializeEventListeners() {
+    dom.tabs.forEach(button => button.addEventListener('click', () => {
+        const tab = button.dataset.tab;
+        dom.tabs.forEach(btn => btn.classList.remove('active'));
+        document.querySelectorAll(`.tab-button[data-tab="${tab}"]`).forEach(btn => btn.classList.add('active'));
+        dom.tabPanels.forEach(panel => panel.classList.toggle('active', panel.id === `tab-${tab}`));
+    }));
+
+    dom.budgetSelector.addEventListener('change', handleBudgetSwitch);
+    dom.mainFab.addEventListener('click', () => dom.fabContainer.classList.toggle('open'));
+
+    document.getElementById('addBudgetButton').addEventListener('click', handleAddNewBudget);
+    document.getElementById('deleteBudgetButton').addEventListener('click', deleteCurrentBudget);
+    document.getElementById('addExpenseFab').onclick = () => { openTransactionModal(); dom.fabContainer.classList.remove('open'); };
+    document.getElementById('addIncomeFab').onclick = () => { openIncomeModal(); dom.fabContainer.classList.remove('open'); };
+    document.getElementById('addCategoryModalButton').onclick = () => openCategoryModal();
+    document.getElementById('archiveMonthButton').onclick = handleArchiveMonth;
+    dom.voiceFab.onclick = startRecognition;
+    
+    document.getElementById('manageTypesButton').onclick = () => openManagementModal({ title: "Manage Category Types", itemsKey: "types", placeholder: "New Type Name", onAdd: async (name) => { if(!state.store.currentBudget.types) state.store.currentBudget.types = []; state.store.currentBudget.types.push(name); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); }, onDelete: async (name) => { const categoriesUsingType = state.store.currentBudget.categories.filter(c => c.type === name); const confirmed = await showConfirmModal('Delete Type?', `This will also delete ${categoriesUsingType.length} associated categories and all their transactions.`); if (confirmed) { state.store.currentBudget.types = state.store.currentBudget.types.filter(t => t !== name); const categoryIdsToDelete = categoriesUsingType.map(c => c.id); state.store.currentBudget.categories = state.store.currentBudget.categories.filter(c => c.type !== name); state.store.currentBudget.transactions = state.store.currentBudget.transactions.filter(t => !categoryIdsToDelete.includes(t.categoryId)); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); } return confirmed; } });
+    document.getElementById('managePaymentsButton').onclick = () => openManagementModal({ title: "Manage Payment Methods", itemsKey: "paymentMethods", placeholder: "New Payment Method", onAdd: async (name) => { if(!state.store.currentBudget.paymentMethods) state.store.currentBudget.paymentMethods = []; state.store.currentBudget.paymentMethods.push(name); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); }, onDelete: async (name) => { const confirmed = await showConfirmModal('Delete Payment Method?', `This will not affect existing transactions.`); if (confirmed) { state.store.currentBudget.paymentMethods = state.store.currentBudget.paymentMethods.filter(pm => pm !== name); await firestore.saveBudget(state.store.userId, state.store.activeBudgetId, state.store.currentBudget); } return confirmed; } });
+    document.getElementById('manageSubcategoriesButton').onclick = () => openSubcategoriesModal();
+    
+    dom.transactionList.addEventListener('click', handleTransactionListClick);
+    dom.monthlyHistoryList.addEventListener('click', handleHistoryClick);
+    
+    document.getElementById('filterCategory').addEventListener('change', renderTransactionList);
+    document.getElementById('filterPaymentMethod').addEventListener('change', renderTransactionList);
+    document.getElementById('filterStartDate').addEventListener('change', renderTransactionList);
+    document.getElementById('filterEndDate').addEventListener('change', renderTransactionList);
+    document.getElementById('clearFiltersButton').onclick = () => { document.getElementById('filterCategory').value = 'all'; document.getElementById('filterPaymentMethod').value = 'all'; document.getElementById('filterStartDate').value = ''; document.getElementById('filterEndDate').value = ''; renderTransactionList(); };
+}
+
+// --- RENDER FUNCTIONS ---
+
 export function renderUI() {
     if (!state.store.currentBudget) return;
-    dom.loadingSpinner.classList.add('hidden');
-    dom.mainContent.classList.remove('hidden');
     renderSummary();
     renderCategories();
     populateTransactionFilters();
@@ -118,107 +151,4 @@ export function renderUI() {
     renderInsights();
 }
 
-// --- RENDER FUNCTIONS ---
-
-function renderSummary() {
-    const totalIncome = state.store.calculateTotalIncome();
-    const totalSpent = (state.store.currentBudget.categories || []).reduce((sum, cat) => sum + (cat.spent || 0), 0);
-    const netFlow = totalIncome - totalSpent;
-    const spentPercentage = totalIncome > 0 ? (totalSpent / totalIncome) * 100 : 0;
-    
-    document.getElementById('totalBudgetValue').textContent = totalIncome.toFixed(2);
-    document.getElementById('totalSpentValue').textContent = totalSpent.toFixed(2);
-    
-    const remainingEl = document.getElementById('overallRemainingValue');
-    remainingEl.textContent = netFlow.toFixed(2);
-    remainingEl.className = `font-bold ${netFlow < 0 ? 'text-red-600' : 'text-green-600'}`;
-    
-    const overallProgressBar = document.getElementById('overallProgressBar');
-    if(overallProgressBar && overallProgressBar.parentElement) {
-        requestAnimationFrame(() => {
-            overallProgressBar.style.width = `${Math.min(100, spentPercentage)}%`;
-        });
-    }
-}
-
-function renderCategories() {
-    const container = dom.categoryDetailsContainer;
-    if (!container) return;
-    
-    container.innerHTML = '';
-    const types = state.store.currentBudget.types || [];
-    const categories = state.store.currentBudget.categories || [];
-    
-    types.forEach(type => {
-        const categoriesOfType = categories.filter(c => c.type === type);
-        if (categoriesOfType.length === 0) return;
-        
-        const section = document.createElement('div');
-        section.className = 'mb-6';
-        
-        const title = document.createElement('h3');
-        title.className = 'text-xl sm:text-2xl font-bold text-gray-800 mb-4 pl-1 will-animate';
-        title.textContent = type;
-        section.appendChild(title);
-        observer.observe(title);
-        
-        const grid = document.createElement('div');
-        grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
-        section.appendChild(grid);
-        
-        categoriesOfType.forEach((category, index) => {
-            const cardHTML = createCategoryCardHTML(category);
-            const cardFragment = document.createRange().createContextualFragment(cardHTML);
-            const cardElement = cardFragment.firstChild;
-            cardElement.style.transitionDelay = `${index * 50}ms`;
-            grid.appendChild(cardElement);
-            observer.observe(cardElement);
-        });
-        container.appendChild(section);
-    });
-}
-
-function renderTransactionList() {
-    const listEl = dom.transactionList;
-    if (!listEl) return;
-
-    const allItems = [
-        ...(state.store.currentBudget.transactions || []).map(t => ({ ...t, type: 'expense' })),
-        ...(state.store.currentBudget.incomeTransactions || []).map(t => ({ ...t, type: 'income' }))
-    ].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-    if (allItems.length === 0) {
-        listEl.innerHTML = '<p class="text-center text-gray-500 py-8">No transactions or income recorded yet.</p>';
-        return;
-    }
-
-    listEl.innerHTML = allItems.map(item => createTransactionItemHTML(item)).join('');
-}
-
-async function renderHistoryList() {
-    const historyList = dom.monthlyHistoryList;
-    if (!historyList || !state.store.activeBudgetId) return;
-
-    historyList.innerHTML = '<div class="spinner"></div>';
-    try {
-        const snapshot = await firestore.getArchivedBudgets(state.store.userId, state.store.activeBudgetId);
-        if (snapshot.empty) {
-            historyList.innerHTML = '<p class="text-gray-500 text-center">No archives found.</p>';
-            return;
-        }
-        historyList.innerHTML = snapshot.docs
-            .sort((a, b) => b.id.localeCompare(a.id))
-            .map(doc => `
-                <div class="bg-white p-3 rounded-lg flex justify-between items-center shadow-sm">
-                    <span class="font-semibold">${doc.id}</span>
-                    <button data-archive-id="${doc.id}" class="view-archive-btn btn bg-indigo-500 hover:bg-indigo-600 btn-sm py-1 px-3">View</button>
-                </div>
-            `).join('');
-    } catch (error) {
-        console.error("Error fetching archives:", error);
-        historyList.innerHTML = '<p class="text-red-500 text-center">Could not load history.</p>';
-        showNotification("Failed to load budget history.", "danger");
-    }
-}
-
-// ... other functions ...
+// ... Rest of the file
