@@ -1,10 +1,8 @@
 import { doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db } from './firebase.js';
 import { defaultBudget, appId } from './config.js';
-import { setAllBudgets, setActiveBudgetId as setStateActiveBudgetId, setUnsubscribe, setCurrentBudget } from './state.js';
-import { showNotification, renderUI } from './ui.js';
-
-// --- DATA READ/WRITE FUNCTIONS ---
+import { store, setAllBudgets, updateAllBudgets, setCurrentBudget, setUnsubscribe } from './state.js';
+import { showNotification, populateBudgetSelector } from './ui.js';
 
 export async function saveBudget(userId, budgetId, budgetData) {
     if (!userId || !budgetId || !budgetData) return;
@@ -45,22 +43,15 @@ export async function saveActiveBudgetId(userId, budgetId) {
     }
 }
 
-// --- APP INITIALIZATION LOGIC ---
+export async function getArchivedBudgets(userId, budgetId) {
+    const archiveColRef = collection(db, `artifacts/${appId}/users/${userId}/budgets/${budgetId}/archive`);
+    return await getDocs(archiveColRef);
+}
 
-export async function initializeAppState(userId) {
-    const dom = {
-        mainContent: document.getElementById('mainContent'),
-        budgetControlPanel: document.getElementById('budgetControlPanel'),
-        loadingSpinner: document.getElementById('loadingSpinner')
-    };
-    
-    dom.mainContent.classList.add('hidden');
-    dom.budgetControlPanel.classList.add('hidden');
-    dom.loadingSpinner.classList.remove('hidden');
-
+export async function initializeAppState() {
     try {
-        await migrateOldBudgetStructure(userId);
-        const budgetsColRef = collection(db, `artifacts/${appId}/users/${userId}/budgets`);
+        await migrateOldBudgetStructure(store.userId);
+        const budgetsColRef = collection(db, `artifacts/${appId}/users/${store.userId}/budgets`);
         const budgetsSnapshot = await getDocs(budgetsColRef);
         
         let budgets = {};
@@ -69,11 +60,13 @@ export async function initializeAppState(userId) {
 
         let budgetIdToLoad;
         if (Object.keys(budgets).length === 0) {
-            const newBudget = await createNewBudget(userId, "My First Budget");
-            budgetIdToLoad = newBudget.id;
-            updateAllBudgets(newBudget.id, newBudget.name);
+            const newBudget = await createNewBudget(store.userId, "My First Budget");
+            if (newBudget) {
+                budgetIdToLoad = newBudget.id;
+                updateAllBudgets(newBudget.id, newBudget.name);
+            }
         } else {
-            const prefsDocRef = doc(db, `artifacts/${appId}/users/${userId}/preferences/userPrefs`);
+            const prefsDocRef = doc(db, `artifacts/${appId}/users/${store.userId}/preferences/userPrefs`);
             const prefsDoc = await getDoc(prefsDocRef);
             if (prefsDoc.exists() && budgets[prefsDoc.data().activeBudgetId]) {
                 budgetIdToLoad = prefsDoc.data().activeBudgetId;
@@ -82,14 +75,13 @@ export async function initializeAppState(userId) {
             }
         }
         
-        setStateActiveBudgetId(budgetIdToLoad);
-        await setupBudgetListener(userId, budgetIdToLoad);
-        dom.budgetControlPanel.classList.remove('hidden');
-
+        store.setActiveBudgetId(budgetIdToLoad);
+        populateBudgetSelector();
+        await setupBudgetListener(store.userId, budgetIdToLoad);
+        
     } catch (error) {
         console.error("Failed to initialize app state:", error);
-        showNotification("A critical error occurred while loading. Please refresh.", "danger", 10000);
-        dom.loadingSpinner.classList.add('hidden');
+        throw error; // Re-throw to be caught by the main initializer
     }
 }
 
@@ -99,9 +91,8 @@ async function migrateOldBudgetStructure(userId) {
     try {
         const oldBudgetSnap = await getDoc(oldBudgetRef);
         const budgetsSnapshot = await getDocs(budgetsColRef);
-
         if (oldBudgetSnap.exists() && budgetsSnapshot.empty) {
-            showNotification("Updating your account...", "info");
+            showNotification("Updating account...", "info");
             const oldBudgetData = oldBudgetSnap.data();
             oldBudgetData.name = "Default Budget";
             if (oldBudgetData.income && !oldBudgetData.incomeTransactions) {
@@ -125,27 +116,19 @@ export function setupBudgetListener(userId, budgetId) {
     const budgetDocRef = doc(db, `artifacts/${appId}/users/${userId}/budgets/${budgetId}`);
     return new Promise((resolve, reject) => {
         const unsubscribe = onSnapshot(budgetDocRef, (docSnap) => {
-            try {
-                if (docSnap.exists()) {
-                    const budgetData = docSnap.data();
-                    setCurrentBudget(budgetData);
-                    renderUI(); // Render the UI with the new data
-                    resolve();
-                } else {
-                    reject(new Error(`Budget with ID ${budgetId} not found.`));
-                }
-            } catch(error) {
-                console.error("Error rendering UI from snapshot:", error);
-                showNotification("An error occurred displaying the budget.", "danger");
-                reject(error);
+            if (docSnap.exists()) {
+                const budgetData = docSnap.data();
+                // Instead of rendering here, we just update the central state.
+                // The state's subscriber (renderUI) will handle the rest.
+                setCurrentBudget(budgetData);
+                resolve();
+            } else {
+                reject(new Error(`Budget with ID ${budgetId} not found.`));
             }
         }, (error) => {
             console.error(`Error listening to budget ${budgetId}:`, error);
-            showNotification("Connection to data lost. Please refresh.", "danger");
             reject(error);
         });
         setUnsubscribe(unsubscribe);
     });
 }
-
-// ... Additional firestore functions for insights, history can be added here
