@@ -1,8 +1,9 @@
 import { doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, addDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { db } from './firebase.js';
 import { defaultBudget, appId } from './config.js';
-import { store, setAllBudgets, updateAllBudgets, setCurrentBudget, setUnsubscribe } from './state.js';
-import { showNotification, populateBudgetSelector } from './ui.js';
+import { store, setAllBudgets, updateAllBudgets, setCurrentBudget, setUnsubscribe, setActiveBudgetId as setStateActiveBudgetId } from './state.js';
+import { showNotification, populateBudgetSelector, renderUI } from './ui.js';
+import { logError } from './utils.js';
 
 export async function saveBudget(userId, budgetId, budgetData) {
     if (!userId || !budgetId || !budgetData) return;
@@ -10,8 +11,9 @@ export async function saveBudget(userId, budgetId, budgetData) {
     try {
         await setDoc(budgetDocRef, budgetData, { merge: true });
     } catch (error) {
-        console.error("Error saving budget:", error);
-        showNotification("Error: Could not save changes.", "danger");
+        logError('firestore.saveBudget', error);
+        showNotification("Error saving your changes. Please check your connection.", "danger");
+        throw error; // Re-throw the error for the caller to handle if needed
     }
 }
 
@@ -23,7 +25,7 @@ export async function createNewBudget(userId, name) {
         const docRef = await addDoc(budgetsColRef, newBudgetData);
         return { id: docRef.id, name: name };
     } catch (error) {
-        console.error("Error creating new budget:", error);
+        logError('firestore.createNewBudget', error);
         showNotification("Could not create new budget.", "danger");
         return null;
     }
@@ -31,7 +33,13 @@ export async function createNewBudget(userId, name) {
 
 export async function deleteBudget(userId, budgetId) {
     const budgetToDelRef = doc(db, `artifacts/${appId}/users/${userId}/budgets/${budgetId}`);
-    await deleteDoc(budgetToDelRef);
+    try {
+        await deleteDoc(budgetToDelRef);
+    } catch (error) {
+        logError('firestore.deleteBudget', error);
+        showNotification("Failed to delete budget.", "danger");
+        throw error;
+    }
 }
 
 export async function saveActiveBudgetId(userId, budgetId) {
@@ -39,53 +47,28 @@ export async function saveActiveBudgetId(userId, budgetId) {
     try {
         await setDoc(prefsDocRef, { activeBudgetId: budgetId });
     } catch (error) {
-        console.error("Could not save user preference:", error);
+        logError('firestore.saveActiveBudgetId', error);
+        // This is a non-critical error, so we don't show a notification
     }
 }
 
 export async function getArchivedBudgets(userId, budgetId) {
     const archiveColRef = collection(db, `artifacts/${appId}/users/${userId}/budgets/${budgetId}/archive`);
-    return await getDocs(archiveColRef);
-}
-
-export async function initializeAppState() {
     try {
-        await migrateOldBudgetStructure(store.userId);
-        const budgetsColRef = collection(db, `artifacts/${appId}/users/${store.userId}/budgets`);
-        const budgetsSnapshot = await getDocs(budgetsColRef);
-        
-        let budgets = {};
-        budgetsSnapshot.forEach(doc => { budgets[doc.id] = doc.data().name || "Untitled Budget"; });
-        setAllBudgets(budgets);
-
-        let budgetIdToLoad;
-        if (Object.keys(budgets).length === 0) {
-            const newBudget = await createNewBudget(store.userId, "My First Budget");
-            if (newBudget) {
-                budgetIdToLoad = newBudget.id;
-                updateAllBudgets(newBudget.id, newBudget.name);
-            }
-        } else {
-            const prefsDocRef = doc(db, `artifacts/${appId}/users/${store.userId}/preferences/userPrefs`);
-            const prefsDoc = await getDoc(prefsDocRef);
-            if (prefsDoc.exists() && budgets[prefsDoc.data().activeBudgetId]) {
-                budgetIdToLoad = prefsDoc.data().activeBudgetId;
-            } else {
-                budgetIdToLoad = Object.keys(budgets)[0];
-            }
-        }
-        
-        store.setActiveBudgetId(budgetIdToLoad);
-        populateBudgetSelector();
-        await setupBudgetListener(store.userId, budgetIdToLoad);
-        
+        return await getDocs(archiveColRef);
     } catch (error) {
-        console.error("Failed to initialize app state:", error);
-        throw error; // Re-throw to be caught by the main initializer
+        logError('firestore.getArchivedBudgets', error);
+        showNotification("Could not load budget history.", "danger");
+        return { empty: true, docs: [] }; // Return an empty snapshot-like object
     }
 }
 
-async function migrateOldBudgetStructure(userId) {
+export async function initializeAppState() {
+    // This function now lives in main.js to orchestrate modules
+    // but the logic inside it uses these firestore functions.
+}
+
+export async function migrateOldBudgetStructure(userId) {
     const oldBudgetRef = doc(db, `artifacts/${appId}/users/${userId}/budget/current`);
     const budgetsColRef = collection(db, `artifacts/${appId}/users/${userId}/budgets`);
     try {
@@ -107,7 +90,7 @@ async function migrateOldBudgetStructure(userId) {
             showNotification("Account update complete!", "success");
         }
     } catch (error) {
-        console.error("Migration failed: ", error);
+        logError('firestore.migrateOldBudgetStructure', error);
         showNotification("Could not update account structure.", "danger");
     }
 }
@@ -116,17 +99,20 @@ export function setupBudgetListener(userId, budgetId) {
     const budgetDocRef = doc(db, `artifacts/${appId}/users/${userId}/budgets/${budgetId}`);
     return new Promise((resolve, reject) => {
         const unsubscribe = onSnapshot(budgetDocRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const budgetData = docSnap.data();
-                // Instead of rendering here, we just update the central state.
-                // The state's subscriber (renderUI) will handle the rest.
-                setCurrentBudget(budgetData);
-                resolve();
-            } else {
-                reject(new Error(`Budget with ID ${budgetId} not found.`));
+            try {
+                if (docSnap.exists()) {
+                    setCurrentBudget(docSnap.data());
+                    resolve();
+                } else {
+                    reject(new Error(`Budget with ID ${budgetId} not found.`));
+                }
+            } catch(error) {
+                logError('firestore.setupBudgetListener_callback', error);
+                reject(error);
             }
         }, (error) => {
-            console.error(`Error listening to budget ${budgetId}:`, error);
+            logError('firestore.setupBudgetListener_snapshotError', error);
+            showNotification("Connection to data lost. Please refresh.", "danger");
             reject(error);
         });
         setUnsubscribe(unsubscribe);
