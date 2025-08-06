@@ -1,27 +1,34 @@
-import { initializeAuth } from './auth.js';
-import { initializeAppState } from './firestore.js';
-import { initializeDOMCache, initializeEventListeners, setUIState } from './ui.js';
-import { setupSpeechRecognition } from './speech.js';
-import { store, setUserId } from './state.js';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+import { firebaseConfig } from './config.js';
+import { initializeAppLogic } from './app.js';
 
+/**
+ * This is the single entry point for the entire application.
+ * It waits for the browser to confirm the HTML page is fully loaded before doing anything.
+ */
 document.addEventListener('DOMContentLoaded', () => {
-    // Connect the central state to the UI renderer. Any state change
-    // will now automatically trigger the UI to show the 'loaded' state.
-    store.subscribe(() => setUIState('loaded'));
-    
-    initializeAuth(onUserAuthenticated);
-});
+    // 1. Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
 
-async function onUserAuthenticated(user) {
-    try {
-        // This sequence is now wrapped in a robust error handler.
-        initializeDOMCache();
-        setUserId(user.uid);
-        initializeEventListeners();
-        await initializeAppState();
-        setupSpeechRecognition();
-    } catch (error) {
-        console.error("Critical error during app initialization:", error);
-        setUIState('error', { message: "Could not load your budget. Please check your internet connection and refresh the page." });
-    }
-}
+    // 2. Start the authentication process
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            // 3. Once a user is authenticated, initialize the main application logic
+            initializeAppLogic(user, db);
+        } else {
+            // 4. If no user, attempt to sign in anonymously
+            try {
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                else await signInAnonymously(auth);
+            } catch (error) {
+                console.error("Critical Authentication Error:", error);
+                document.body.innerHTML = `<div class="error-screen">Could not connect to the service. Please refresh the page.</div>`;
+            }
+        }
+    });
+});
