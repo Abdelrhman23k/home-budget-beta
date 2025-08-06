@@ -99,7 +99,6 @@ export function renderUI() {
     populateTransactionFilters();
     renderTransactionList();
     renderHistoryList();
-    renderInsights();
 }
 
 function renderSummary() {
