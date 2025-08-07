@@ -3,6 +3,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken }
 import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { firebaseConfig } from './config.js';
 import { initializeAppLogic } from './app.js';
+import { setUIState } from "./ui/core.js";
 
 /**
  * This is the single entry point for the entire application.
@@ -27,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 else await signInAnonymously(auth);
             } catch (error) {
                 console.error("Critical Authentication Error:", error);
-                document.body.innerHTML = `<div class="error-screen">Could not connect to the service. Please refresh the page.</div>`;
+                setUIState('error', { message: "Could not connect to the service. Please refresh the page." });
             }
         }
     });
