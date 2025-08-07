@@ -1,10 +1,9 @@
 import * as firestore from './firestore.js';
-import * as ui from './ui/core.js';
+import * as ui from './ui.js';
 import * as dashboardUI from './ui/dashboard.js';
 import * as transactionsUI from './ui/transactions.js';
 import * as historyUI from './ui/history.js';
 import * as insightsUI from './ui/insights.js';
-import { initializeEventListeners } from './ui/events.js';
 import * as state from './state.js';
 import { setupSpeechRecognition } from './speech.js';
 
@@ -23,10 +22,7 @@ export async function initializeAppLogic(user, db) {
         state.setUserId(user.uid);
         ui.renderUserId(user.uid);
         
-        // 3. Make all static buttons and elements interactive.
-        initializeEventListeners();
-        
-        // 4. Connect the state store to the UI renderer.
+        // 3. Connect the state store to the UI renderer.
         // When state changes, this will call the correct render functions.
         state.store.subscribe(() => {
             dashboardUI.renderDashboard();

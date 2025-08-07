@@ -1,5 +1,5 @@
 import * as state from '../state.js';
-import { dom } from './core.js';
+import { dom } from '../ui.js';
 import { defaultCategoryIcon } from '../config.js';
 
 const observer = new IntersectionObserver((entries) => { entries.forEach(entry => { if (entry.isIntersecting) { entry.target.classList.add('is-visible'); observer.unobserve(entry.target); } }); }, { threshold: 0.1 });
