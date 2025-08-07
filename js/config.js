@@ -23,7 +23,6 @@ export const categoryMapping = {
     "groceries": ["groceries", "grocery"],
     "utilities": ["utilities", "bills"],
     "savings": ["savings"]
-    // Add other mappings as needed
 };
 
 export const CONSTANTS = {
