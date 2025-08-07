@@ -3,7 +3,7 @@ import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken }
 import { getFirestore } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 import { firebaseConfig } from './config.js';
 import { initializeAppLogic } from './app.js';
-import { setUIState } from "./ui/core.js";
+import { setUIState } from "./ui.js";
 
 /**
  * This is the single entry point for the entire application.
