@@ -5,14 +5,9 @@
  */
 export function formatTimestamp(isoString) {
     if (!isoString) return 'Invalid Date';
-    if (isoString.length === 10) {
-        const [year, month, day] = isoString.split('-');
-        const date = new Date(year, month - 1, day);
-        const options = { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' };
-        return date.toLocaleDateString('en-US', options);
-    }
+    // Handles both 'YYYY-MM-DD' and full ISO strings
     const date = new Date(isoString);
-    const options = { month: 'short', day: 'numeric', year: 'numeric' };
+    const options = { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }; // Use UTC to avoid timezone issues with YYYY-MM-DD
     return date.toLocaleDateString('en-US', options);
 }
 
