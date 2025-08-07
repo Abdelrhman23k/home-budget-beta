@@ -1,4 +1,4 @@
-import { CONSTANTS } from '../config.js';
+import { CONSTANTS } from './config.js';
 
 export let dom = {};
 
