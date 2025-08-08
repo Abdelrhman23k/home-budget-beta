@@ -2,7 +2,7 @@ import { doc, getDoc, setDoc, onSnapshot, collection, getDocs, deleteDoc, addDoc
 import { db } from './firebase.js';
 import { defaultBudget, appId } from './config.js';
 import { store, setAllBudgets, updateAllBudgets, setCurrentBudget, setUnsubscribe, setActiveBudgetId as setStateActiveBudgetId } from './state.js';
-import { showNotification, populateBudgetSelector } from './ui/core.js';
+import { showNotification, populateBudgetSelector } from './ui.js';
 import { logError } from './utils.js';
 
 // --- DATA READ/WRITE FUNCTIONS ---

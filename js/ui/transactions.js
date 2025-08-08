@@ -1,6 +1,6 @@
 import * as state from '../state.js';
 import * as utils from '../utils.js';
-import { dom } from './core.js';
+import { dom } from '../ui.js';
 
 /**
  * Main render function for the Transactions tab.

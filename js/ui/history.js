@@ -1,6 +1,6 @@
 import * as state from '../state.js';
 import * as firestore from '../firestore.js';
-import { dom, showNotification, showModal, hideModal } from './core.js';
+import { dom, showNotification, showModal, hideModal } from '../ui.js';
 import { logError, formatTimestamp } from '../utils.js';
 import { CONSTANTS } from '../config.js';
 
